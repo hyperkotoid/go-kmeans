@@ -3,7 +3,7 @@ package kmeans_test
 import (
 	"fmt"
 
-	"github.com/dennistrukhin/go-kmeans"
+	"github.com/hyperkotoid/go-kmeans"
 )
 
 func ExampleKMeans_Partition() {

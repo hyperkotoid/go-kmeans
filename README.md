@@ -1,6 +1,6 @@
 # K-Means for Go
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/dennistrukhin/go-kmeans)](https://goreportcard.com/report/github.com/dennistrukhin/go-kmeans)
+[![Go Report Card](https://goreportcard.com/badge/github.com/hyperkotoid/go-kmeans)](https://goreportcard.com/report/github.com/hyperkotoid/go-kmeans)
 
 Generic Lloyd's algorithm. The point type is arbitrary: the library needs a distance, a cluster center, and the initial centroids.
 
@@ -12,7 +12,7 @@ One run returns:
 - inertia: the sum of distances from points to their assigned centroids
 
 ```bash
-go get github.com/dennistrukhin/go-kmeans
+go get github.com/hyperkotoid/go-kmeans
 ```
 
 ### Example
@@ -23,7 +23,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/dennistrukhin/go-kmeans"
+	"github.com/hyperkotoid/go-kmeans"
 )
 
 type Point struct{ X, Y float64 }
