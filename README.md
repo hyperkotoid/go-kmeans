@@ -1,108 +1,72 @@
-# K-Means for golang
+# K-Means for Go
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/dennistrukhin/go-kmeans)](https://goreportcard.com/report/github.com/dennistrukhin/go-kmeans)
 
-Поддерживает любые типы данных. Для работы необходимо передать три функции:
-- Metric - метрика, рассчитывающая расстояние между двумя точками
-- Average - функция расчёта среднего значения для проивзольного количества точек
-- Seeder - функция инициализации центроидов
+Generic Lloyd's algorithm. The point type is arbitrary: the library needs a distance, a cluster center, and the initial centroids.
 
-Результатом является:
+One run returns:
 
-- Массив центроидов
-- Массив принадлжености точек данных к центроидам
+- centroids
+- a cluster label for each input point
+- the iteration count
+- inertia: the sum of distances from points to their assigned centroids
 
-Массив на выходе имеет ту же размерность, что и массив на входе, но содержит 
-вместо типа входных данных int с номером центроида
+```bash
+go get github.com/dennistrukhin/go-kmeans
+```
 
-### Пример использования
-
-Программа для кластеризации точек по цвету в jpeg-изображении
+### Example
 
 ```go
 package main
 
 import (
 	"fmt"
+
 	"github.com/dennistrukhin/go-kmeans"
-	"image"
-	"image/jpeg"
-	"math"
-	"math/rand"
-	"os"
-	"time"
 )
 
-type RGB struct {
-	R uint8
-	G uint8
-	B uint8
-}
+type Point struct{ X, Y float64 }
 
 func main() {
-	rand.Seed(time.Now().UnixNano())
-	m := func(x, y RGB) float64 {
-		dR := int(y.R) - int(x.R)
-		dG := int(y.G) - int(x.G)
-		dB := int(y.B) - int(x.B)
-		return math.Sqrt(float64(dR*dR + dG*dG + dB*dB))
-	}
-	s := func(_ int) RGB {
-		return RGB{
-			R: uint8(rand.Intn(255)),
-			G: uint8(rand.Intn(255)),
-			B: uint8(rand.Intn(255)),
-		}
-	}
-	a := func(args ...RGB) RGB {
-		if len(args) == 0 {
-			return RGB{}
-		}
-
-		r_, g_, b_ := 0, 0, 0
-		for _, x := range args {
-			r_ += int(x.R)
-			g_ += int(x.G)
-			b_ += int(x.B)
-		}
-		return RGB{
-			R: uint8(r_ / len(args)),
-			G: uint8(g_ / len(args)),
-			B: uint8(b_ / len(args)),
-		}
-	}
-
-	image.RegisterFormat("jpeg", "jpeg", jpeg.Decode, jpeg.DecodeConfig)
-	file, err := os.Open("/Users/dennis/Downloads/1.jpeg")
-	if err != nil {
-		fmt.Println("Error: File could not be opened")
-		os.Exit(1)
-	}
-	defer file.Close()
-
-	img, _, err := image.Decode(file)
-	if err != nil {
-		fmt.Println("Error: Image could not be decoded")
-		os.Exit(1)
-	}
-	bounds := img.Bounds()
-	width, height := bounds.Max.X, bounds.Max.Y
-	pixels := make([]RGB, width*height)
-	for y := 0; y < height; y++ {
-		for x := 0; x < width; x++ {
-			r, g, b, _ := img.At(x, y).RGBA()
-			pixels[y*height+x] = RGB{
-				R: uint8(r & 0xff),
-				G: uint8(g & 0xff),
-				B: uint8(b & 0xff),
+	data := []Point{{0, 0}, {2, 0}, {10, 10}, {12, 10}}
+	km := kmeans.New(
+		func(a, b Point) float64 {
+			dx, dy := a.X-b.X, a.Y-b.Y
+			return dx*dx + dy*dy
+		},
+		func(points []Point) Point {
+			var sum Point
+			for _, p := range points {
+				sum.X += p.X
+				sum.Y += p.Y
 			}
-		}
+			n := float64(len(points))
+			return Point{sum.X / n, sum.Y / n}
+		},
+		func([]Point, int) ([]Point, error) {
+			return []Point{{0, 0}, {10, 10}}, nil
+		},
+	)
+	result, err := km.Partition(data, 2)
+	if err != nil {
+		panic(err)
 	}
-
-	k := kmeans.New[RGB](m, s, a)
-	centroids, _ := k.Partition(pixels, 5)
-	for _, c := range centroids {
-		fmt.Printf("%v", c)
-	}
+	fmt.Println(result.Centroids)
+	fmt.Println(result.Labels)
 }
 ```
+
+`Forgy` (k distinct data points) and `KMeansPP` provide random initialization. Both take a `*rand.Rand`. Do not use one generator from several goroutines.
+
+### Contract
+
+`Metric` is the distance between two points. For Euclidean data, pass squared distance, without `Sqrt`: the arithmetic mean is then the correct center, and inertia is the sum of squared errors. `Partition` may call `Metric` concurrently.
+
+`Average` is the center of a non-empty cluster. It must minimize `Metric`, or the algorithm is not guaranteed to converge. The point slice is valid only for the duration of the call.
+
+`Initializer` chooses the k starting centroids. `WithEpsilon` (default `1e-4`) sets the centroid-shift tolerance, `WithMaxIterations` (default 500) sets the iteration limit, and `WithWorkers` sets how many goroutines assign points. Short inputs are assigned on a single thread.
+
+An empty cluster is not averaged. Its centroid moves to the point farthest from that point's current centroid, preferring a point from a cluster that has at least two points.
+
+`Partition` returns an error when there is no data, `k` is outside `1..len(data)`, a required function is missing, or an option is invalid.
